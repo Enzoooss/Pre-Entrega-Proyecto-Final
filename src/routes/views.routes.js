@@ -1,20 +1,86 @@
-import { Router } from 'express';
+const Router = require("./router");
+const {
+  viewLogin,
+  viewRegister,
+  viewProfile,
+  viewRecoverPassword,
+  viewResetPassword,
+  viewPanelAdmin,
+  viewHome,
+  viewRealTime,
+  viewChat,
+  viewProducts,
+  mockingProducts,
+  loggerTest,
+  viewMyCart,
+} = require("../controllers/views.controller");
+const authUser = require("../middlewares/authUser");
+const auth = require("../middlewares/auth");
+const auth2 = require("../middlewares/auth2");
+const authAdmin = require("../middlewares/authAdmin");
+const passportCall = require("../utils/passportCall");
 
-const router = Router();
+class ViewRoutes extends Router {
+  init() {
+    this.get("/", ["PUBLIC"], auth, passportCall("jwt"), viewHome);
+    this.get("/login", ["PUBLIC"], auth2, viewLogin);
+    this.get("/register", ["PUBLIC"], auth2, viewRegister);
+    this.get(
+      "/profile",
+      ["USER", "PREMIUM"],
+      passportCall("jwt"),
+      authAdmin,
+      viewProfile
+    );
+    this.get(
+      "/paneladmin",
+      ["ADMIN"],
+      passportCall("jwt"),
+      authUser,
+      viewPanelAdmin
+    );
 
-// Ruta para mostrar el formulario de login
-router.get('/login', (req, res) => {
-    res.render('login'); // Renderiza la vista 'login.hbs'
-});
+    this.get("/recoverpassword", ["PUBLIC"], auth2, viewRecoverPassword);
+    this.get("/resetpassword", ["PUBLIC"], viewResetPassword);
 
-// Ruta para mostrar el formulario de registro
-router.get('/register', (req, res) => {
-    res.render('register'); // Renderiza la vista 'register.hbs'
-});
+    this.get(
+      "/realtimeproducts",
+      ["ADMIN"],
+      auth,
+      passportCall("jwt"),
+      authUser,
+      viewRealTime
+    );
 
-// Ruta para mostrar la página de inicio
-router.get('/', (req, res) => {
-    res.render('home'); // Renderiza la vista 'home.hbs'
-});
+    this.get(
+      "/chat",
+      ["USER", "PREMIUM"],
+      auth,
+      passportCall("jwt"),
+      authAdmin,
+      viewChat
+    );
 
-export default router;
+    this.get(
+      "/products",
+      ["USER", "PREMIUM"],
+      auth,
+      passportCall("jwt"),
+      authAdmin,
+      viewProducts
+    );
+    this.get(
+      "/mycart",
+      ["USER", "PREMIUM"],
+      auth,
+      passportCall("jwt"),
+      authAdmin,
+      viewMyCart
+    );
+
+    this.get("/mockingproducts", ["PUBLIC"], mockingProducts);
+    this.get("/loggerTest", ["PUBLIC"], loggerTest);
+  }
+}
+
+module.exports = new ViewRoutes();

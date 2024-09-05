@@ -1,95 +1,77 @@
-import passport from "passport";
-import jwt from "passport-jwt";
-import localStrategy from "passport-local";
-import { userModel } from "../models/user.model.js";
-import { JWT_SECRET } from "../utils/jwtFunctions.js";
-import { verifyPassword } from "../utils/hashFunctions.js";
+const passport = require("passport");
+const userModel = require("../dao/mongo/models/user.model");
+const bcrypt = require("bcrypt");
+const github = require("passport-github2");
+const passportJWT = require("passport-jwt");
+const config = require("./config");
+const { userService, cartService } = require("../services/index.service");
+require('dotenv').config();
 
-const LocalStrategy = localStrategy.Strategy;
-const JWTStrategy = jwt.Strategy;
-const ExtractJWT = jwt.ExtractJwt;
+// adminCoder@coder.com
+//adminCod3r123
 
-function initializePassport() {
-  // Login Strategy
-  passport.use(
-    "login",
-    new LocalStrategy(
-      {
-        usernameField: "email",
-      },
-      async (email, password, done) => {
-        try {
-          const user = await userModel.findOne({ email });
+const buscaToken = (req) => {
+  let token = null;
+  if (req && req.cookies) {
+    token = req.cookies.coderCookie;
 
-          if (!user) {
-            return done(null, false, { message: "Usuario no encontrado" });
-          }
+  }
+  console.log("Token encontrado:", token);
+  return token;
+};
 
-          const isPasswordCorrect = await verifyPassword(
-            password,
-            user.password
-          );
-
-          if (!isPasswordCorrect) {
-            return done(null, false, { message: "Contraseña incorrecta" });
-          }
-
-          return done(null, user);
-        } catch (error) {
-          console.log(error);
-          return done(`Hubo un error: ${error.message}`);
-        }
-      }
-    )
-  );
-
-  // JWT Strategy
+const inicializaPassport = () => {
   passport.use(
     "jwt",
-    new JWTStrategy(
+    new passportJWT.Strategy(
       {
-        jwtFromRequest: ExtractJWT.fromExtractors([cookieExtractor]),
-        secretOrKey: JWT_SECRET,
+        jwtFromRequest: passportJWT.ExtractJwt.fromExtractors([buscaToken]),
+        secretOrKey: config.PRIVATE_KEY,
       },
-      async (payload, done) => {
+      async (contenidoJwt, done) => {
         try {
-          // Buscar al usuario por el id del payload
-          const user = await userModel.findById(payload.id);
-          if (!user) {
-            return done(null, false, { message: "Usuario no encontrado" });
-          }
-          return done(null, user);
+          return done(null, contenidoJwt.user);
         } catch (error) {
-          return done(error, false);
+          return done(error);
         }
       }
     )
   );
+  passport.use(
+    "github",
+    new github.Strategy(
+      {
+        clientID: config.CLIENT_ID,
+        clientSecret: config.CLIENT_SECRET,
+        callbackURL:  config.CALLBACK_URL,
+      },
+      async (token, tokenRefresh, profile, done) => {
+        try {
+          const usuario = await userService.getUserByEmail(profile._json.email);
+          if (!usuario) {
+            let cartId = await cartService.createCart();
+            cartId = cartId._id.toString();
+            let newUsuario = {
+              first_name: profile._json.name,
+              last_name: profile._json.name,
+              age: 18,
+              email: profile._json.email,
+              password: bcrypt.hashSync(
+                profile._json.email,
+                bcrypt.genSaltSync(10)
+              ),
+              cartId,
+            };
+            const result = await userModel.create(newUsuario);
+            return done(null, result);
+          }
+          return done(null, usuario);
+        } catch (error) {
+          done(error);
+        }
+      }
+    )
+  );
+}; //fin inicializaPassport
 
-  // Serialization and Deserialization
-  passport.serializeUser((user, done) => {
-    done(null, user._id);
-  });
-
-  passport.deserializeUser(async (id, done) => {
-    try {
-      const user = await userModel.findById(id);
-      return done(null, user);
-    } catch (error) {
-      return done(`Hubo un error: ${error.message}`);
-    }
-  });
-}
-
-// Cookie extractor function
-function cookieExtractor(req) {
-  let token = null;
-
-  if (req && req.cookies) {
-    token = req.cookies.token;
-  }
-
-  return token;
-}
-
-export { initializePassport };
+module.exports = inicializaPassport;
